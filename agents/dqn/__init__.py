@@ -4,25 +4,30 @@ import numpy as np
 import torch
 from torch.optim import Adam
 
-from agents.agent import RLAgent
-from net import DuellingDQN, NoisyDuellingDQN
+from agents.agent import OfflineAgent
+from .net import DuellingDQN, NoisyDuellingDQN
+from replay import ReplayBuffer, StandardReplayBuffer, PrioritisedReplayBuffer
 from utils import epsilon_decay, copy_weights
 
 
-class DQNAgent(RLAgent):
+class DQNAgent(OfflineAgent):
     def __init__(self, env,
                  device,
-                 gamma,
+                 gamma=0.99,
                  name="DDQN",
                  net_class=DuellingDQN,
                  lr=3e-4,
                  max_steps=10_000,
                  polyak_tau=0.05,
                  hard_update_freq=None,
+                 replay_buffer_type=StandardReplayBuffer,
+                 max_memory=10_000,
                  soft_update_freq=None,
                  reward_scale=1,
+                 batch_size=32,
                  ):
-        super().__init__(env, name)
+        memory = replay_buffer_type(max_memory)
+        super().__init__(env, name, memory=memory, batch_size=batch_size, device=device)
         self.device = device
         self.gamma = gamma
         self.max_steps = max_steps
@@ -30,7 +35,9 @@ class DQNAgent(RLAgent):
         self.hard_update_freq = hard_update_freq
         self.soft_update_freq = soft_update_freq
         self.lr = lr
-        self.reward_scale = 1
+        self.reward_scale = reward_scale
+
+        self.memory: ReplayBuffer = memory
 
         sample_input = env.reset()
         self.net = net_class(sample_input.shape[0], env.action_space.n).to(device)
@@ -52,8 +59,8 @@ class DQNAgent(RLAgent):
             qs = self.net(state).squeeze()
             return qs.argmax().detach().cpu().item(), eps
 
-    def train_step(self, batch, step):
-        states, actions, next_states, rewards, dones = batch
+    def train_step(self, step):
+        states, actions, next_states, rewards, dones = self.memory.sample(self.batch_size)
 
         states = torch.from_numpy(np.stack([np.float32(state) for state in states])).to(self.device,
                                                                                         dtype=torch.float32)
@@ -63,16 +70,7 @@ class DQNAgent(RLAgent):
         rewards = torch.tensor(rewards, dtype=torch.float32, device=self.device)
         dones = torch.tensor(dones, dtype=torch.float32, device=self.device)
 
-        q_values = self.net(states)
-        actions = actions.unsqueeze(1)
-        q_values = q_values.gather(1, actions).squeeze(1)
-
-        next_actions = self.target_net(next_states).argmax(dim=1).unsqueeze(1)
-        next_q_values = self.target_net(next_states).gather(1, next_actions).squeeze(1)
-
-        td_target = self.reward_scale * rewards + self.gamma * next_q_values * (1 - dones)
-        loss = torch.nn.functional.smooth_l1_loss(q_values, td_target)
-        loss = loss.mean()
+        loss = self._ddqn_loss(states, actions, next_states, rewards, dones)
 
         self.optim.zero_grad()
         loss.backward()
@@ -85,6 +83,20 @@ class DQNAgent(RLAgent):
             copy_weights(self.net, self.target_net, polyak=self.polyak_tau)
 
         return {"loss": loss.detach().cpu().item()}
+
+    def _ddqn_loss(self, states, actions, next_states, rewards, dones, reduction="mean"):
+        q_values = self.net(states)
+        actions = actions.unsqueeze(1)
+        q_values = q_values.gather(1, actions).squeeze(1)
+
+        next_actions = self.target_net(next_states).argmax(dim=1).unsqueeze(1)
+        next_q_values = self.target_net(next_states).gather(1, next_actions).squeeze(1)
+
+        td_target = self.reward_scale * rewards + self.gamma * next_q_values * (1 - dones)
+        loss = torch.nn.functional.smooth_l1_loss(q_values, td_target, reduction=reduction)
+        loss = loss.mean()
+
+        return loss
 
     def save(self, path):
         pass
@@ -106,6 +118,7 @@ class DQNAgent(RLAgent):
             "hard_update_freq": self.hard_update_freq,
             "soft_update_freq": self.soft_update_freq,
             "reward_scale": self.reward_scale,
+            "memory_type": self.memory.__class__,
         }
 
 
@@ -123,12 +136,15 @@ class RainbowDQNAgent(DQNAgent):
                  gamma,
                  name="RainbowDQN",
                  net_class=NoisyDuellingDQN,
+                 replay_buffer_type=StandardReplayBuffer,
                  lr=3e-4,
                  max_steps=10_000,
                  polyak_tau=0.05,
                  hard_update_freq=None,
                  soft_update_freq=None,
                  reward_scale=1,
+                 batch_size=32,
+                 max_memory=10_000,
                  ):
         super(RainbowDQNAgent, self).__init__(env=env,
                                               device=device,
@@ -140,7 +156,11 @@ class RainbowDQNAgent(DQNAgent):
                                               polyak_tau=polyak_tau,
                                               hard_update_freq=hard_update_freq,
                                               soft_update_freq=soft_update_freq,
-                                              reward_scale=reward_scale)
+                                              reward_scale=reward_scale,
+                                              replay_buffer_type=replay_buffer_type,
+                                              batch_size=batch_size,
+                                              max_memory=max_memory,
+                                              )
 
     def act(self, state, env, step=-1):
         if isinstance(state, np.ndarray):
@@ -149,11 +169,51 @@ class RainbowDQNAgent(DQNAgent):
         qs = self.net(state).squeeze()
         return qs.argmax().detach().cpu().item(), None
 
-    def train_step(self, batch, step):
-        loss = super().train_step(batch, step)
+    def train_step(self, step):
+        loss = super().train_step(step)
+
         self.net.update_noise()
         self.target_net.update_noise()
+
         return loss
+
+    # def train_step(self, step):
+    #     weights, sampled_exp, indexes = self.memory.sample(self.batch_size, step)
+    #
+    #     states, actions, next_states, rewards, dones = zip(*sampled_exp)
+    #
+    #     states = torch.from_numpy(np.stack([np.float32(state) for state in states])).to(self.device)
+    #     next_states = torch.from_numpy(np.stack([np.float32(state) for state in next_states])).to(self.device)
+    #     actions = torch.tensor(actions, dtype=torch.long, device=self.device)
+    #     rewards = torch.tensor(rewards, dtype=torch.float, device=self.device)
+    #     dones = torch.tensor(dones, dtype=torch.float, device=self.device)
+    #
+    #     q_values = self.net(states)
+    #     actions = actions.unsqueeze(1)
+    #     q_values = q_values.gather(1, actions).squeeze(1)
+    #
+    #     next_actions = self.net(next_states).argmax(dim=1).unsqueeze(1)
+    #     next_q_values = self.target_net(next_states).gather(1, next_actions).squeeze(1)
+    #
+    #     td_target: torch.Tensor = rewards + self.gamma * next_q_values * (1 - dones)
+    #     td_errors: torch.Tensor = torch.nn.functional.smooth_l1_loss(td_target, q_values, reduction="none").to(
+    #         self.device)
+    #
+    #     losses = td_errors * torch.tensor(weights).to(self.device)
+    #     loss = losses.mean()
+    #
+    #     self.optim.zero_grad()
+    #     loss.backward()
+    #     self.optim.step()
+    #
+    #     self.memory.update_priorities(losses.detach().cpu().numpy() + 1e-5, indexes)
+    #
+    #     self.net.update_noise()
+    #     self.target_net.update_noise()
+    #
+    #     return {
+    #         "loss": loss
+    #     }
 
     def log(self, log_dict):
         return None

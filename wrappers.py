@@ -222,29 +222,19 @@ class ImageToPyTorch(gym.ObservationWrapper):
         return np.swapaxes(observation, 2, 0)
 
 
-class ContinuousScaling(gym.Wrapper):
+class WrapPendulum(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.env_name = env.spec.id
 
     def step(self, action):
-        if "CarRacing" in self.env_name:
-            action = self.sigmoid(action)
-            action[0] = 2 * action[0] - 1
-        elif "BipedalWalker" in self.env_name:
-            action = 2 * self.sigmoid(action) - 1
-        elif "LunarLander" in self.env_name:
-            action = 2 * self.sigmoid(action) - 1
-        elif "Pendulum" in self.env_name:
-            action = 4 * self.sigmoid(action) - 2
+        if "Pendulum" in self.env_name:
+            action = 2 * action
         else:
             raise NotImplementedError
 
-        return self.env.step(action)
-
-    @staticmethod
-    def sigmoid(X):
-        return 1 / (1 + np.exp(-X))
+        s, r, d, i = self.env.step(action)  # Why does pensulum return a state (3, 1)? Couldn't tell you
+        return s.squeeze(), r, d, i
 
 
 class LazyToTensor(gym.ObservationWrapper):
@@ -336,22 +326,22 @@ def wrap_ppo_atari(env):
     env = LazyToNumpy(env)
     return env
 
-
-def wrap_ppo(env):
-    env = ProcessFrame84(env)
-    env = ImageToPyTorch(env)
-    env = FrameStack(env, 4)
-    env = ScaledFloatFrame(env)
-    env = ContinuousScaling(env)
-    # env = LazyToTensor(env)
-    env = HandleEnvDone(env)
-    # env = WrapPytorchContinuous(env)
-    return env
-
-
-def wrap_continuous_feature(env):
-    env = ContinuousScaling(env)
-    # env = LazyToTensor(env)
-    env = HandleEnvDone(env)
-    # env = WrapPytorchContinuous(env)
-    return env
+#
+# def wrap_ppo(env):
+#     env = ProcessFrame84(env)
+#     env = ImageToPyTorch(env)
+#     env = FrameStack(env, 4)
+#     env = ScaledFloatFrame(env)
+#     env = ContinuousScaling(env)
+#     # env = LazyToTensor(env)
+#     env = HandleEnvDone(env)
+#     # env = WrapPytorchContinuous(env)
+#     return env
+#
+#
+# def wrap_continuous_feature(env):
+#     env = ContinuousScaling(env)
+#     # env = LazyToTensor(env)
+#     env = HandleEnvDone(env)
+#     # env = WrapPytorchContinuous(env)
+#     return env

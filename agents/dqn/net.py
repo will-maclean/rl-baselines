@@ -64,25 +64,25 @@ class DuellingDQN(nn.Module):
 
 class NoisyDuellingDQN(nn.Module):
     # todo - could be larger for Atari modules
-    def __init__(self, n_in, n_out, activation=nn.ReLU):
+    def __init__(self, n_in, n_out, activation=nn.ReLU, noisy_sigma_0=0.5):
 
         super().__init__()
 
-        self.processing = nn.Sequential(
-            NoisyLinear(n_in, 64),
-            activation()
-        )
+        # self.processing = nn.Sequential(
+        #     NoisyLinear(n_in, 64, sigma_0=noisy_sigma_0),
+        #     activation()
+        # )
 
         self.value = nn.Sequential(
-            NoisyLinear(64, 64),
+            NoisyLinear(n_in, 16, sigma_0=noisy_sigma_0),
             activation(),
-            NoisyLinear(64, 1)
+            NoisyLinear(16, 1, sigma_0=noisy_sigma_0)
         )
 
         self.advantage = nn.Sequential(
-            NoisyLinear(64, 64),
+            NoisyLinear(n_in, 16, sigma_0=noisy_sigma_0),
             activation(),
-            NoisyLinear(64, n_out)
+            NoisyLinear(16, n_out, sigma_0=noisy_sigma_0)
         )
 
     def forward(self, x: torch.Tensor):
@@ -93,7 +93,7 @@ class NoisyDuellingDQN(nn.Module):
         :return: output vector
         """
 
-        x = self.processing(x)
+        # x = self.processing(x)
 
         v = self.value(x)
 
@@ -110,8 +110,8 @@ class NoisyDuellingDQN(nn.Module):
             if isinstance(module, NoisyLinear):
                 module.update_noise()
 
-        for module in self.processing.modules():
-            if isinstance(module, NoisyLinear):
-                module.update_noise()
+        # for module in self.processing.modules():
+        #     if isinstance(module, NoisyLinear):
+        #         module.update_noise()
 
 
