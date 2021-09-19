@@ -6,7 +6,7 @@ from torch.optim import Adam
 
 from agents.agent import OfflineAgent
 from .net import DuellingDQN
-from replay import StandardReplayBuffer, ReplayBuffer
+from utils.replay import StandardReplayBuffer, ReplayBuffer
 from utils import epsilon_decay, copy_weights
 
 

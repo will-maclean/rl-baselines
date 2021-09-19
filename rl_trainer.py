@@ -8,8 +8,7 @@ import wandb
 from agents import DQNAgent, RainbowDQNAgent, RLAgent, DiscreteSACAgent
 from agents.actor_critic import SACAgent
 from agents.agent import OfflineAgent
-from replay import ReplayBuffer, StandardReplayBuffer
-from wrappers import wrap_dqn, WrapPendulum
+from utils.wrappers import wrap_dqn, WrapPendulum
 
 
 class RLTrainer(ABC):
@@ -31,6 +30,7 @@ class OfflineTrainer(RLTrainer):
                  burn_in: int = 2_000,
                  batch_size: int = 32,
                  render: bool = False,
+                 train_every: int = 1,
                  ):
         self.env = env
         self.agent: OfflineAgent = agent
@@ -39,6 +39,7 @@ class OfflineTrainer(RLTrainer):
         self.burn_in = burn_in
         self.batch_size = batch_size
         self.render = render
+        self.train_every = train_every
 
     def train(self):
         # setup Weights and Biases
@@ -56,7 +57,7 @@ class OfflineTrainer(RLTrainer):
         ep_length = 0
 
         while step < self.env_steps:
-            action, act_info = self.agent.act(state, env, step)
+            action, act_info = self.agent.act(state, self.env, step)
             next_state, reward, done, info = self.env.step(action)
 
             if self.render:
@@ -74,7 +75,7 @@ class OfflineTrainer(RLTrainer):
 
             state = next_state
 
-            if step > self.burn_in:
+            if step > self.burn_in and step % self.train_every == 0:
                 for _ in range(self.train_steps_per_env_step):
                     log_dict = self.agent.train_step(step)
                     if log_dict is not None:
@@ -100,6 +101,7 @@ class OfflineTrainer(RLTrainer):
             "train_steps_per_env_step": self.train_steps_per_env_step,
             "burn_in": self.burn_in,
             "batch_size": self.batch_size,
+            "train_every": self.train_every,
         }
 
 
@@ -180,32 +182,33 @@ class OnlineTrainer(RLTrainer):
 
 
 if __name__ == "__main__":
-    env = gym.make("CartPole-v0")
-    # env = wrap_dqn(env)
+    env = gym.make("MsPacman-ramNoFrameskip-v0")
+    env = wrap_dqn(env)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    max_steps = 500_000
+    max_steps = 1_000_000
 
     agent = DiscreteSACAgent(env, device,
                              gamma=0.99,
                              lr_pi=3e-4,
                              lr_q=3e-4,
                              lr_a=3e-4,
-                             max_memory=400_000,
+                             max_memory=500_000,
                              trainable_alpha=True,
-                             reward_scale=1,
+                             reward_scale=0.1,
                              alpha=6,
                              polyak_tau=0.005,
                              pi_hidden_size=64,
-                             q_hidden_size=32,
-                             min_alpha=0.01,
+                             q_hidden_size=64,
+                             min_alpha=0.001,
                              )
 
     trainer = OfflineTrainer(env,
                              agent,
                              env_steps=max_steps,
                              batch_size=32,
-                             burn_in=500,
-                             train_steps_per_env_step=4,
+                             burn_in=20_000,
+                             train_steps_per_env_step=1,
                              render=False,
+                             train_every=4,
                              )
     trainer.train()

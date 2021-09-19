@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .net import ContinuousPolicy, ContinuousCritic
 from agents.agent import OfflineAgent
-from replay import StandardReplayBuffer
+from utils.replay import StandardReplayBuffer
 from utils import copy_weights
 
 

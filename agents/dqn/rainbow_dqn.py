@@ -3,7 +3,7 @@ import torch
 
 from .net import NoisyDuellingDQN
 from .dqn import DQNAgent
-from replay import StandardReplayBuffer
+from utils.replay import StandardReplayBuffer
 
 
 class RainbowDQNAgent(DQNAgent):

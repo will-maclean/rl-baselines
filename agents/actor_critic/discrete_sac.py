@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from replay import StandardReplayBuffer
+from utils.replay import StandardReplayBuffer
 from .net import DiscretePolicy, DiscreteCritic
 from .sac import SACAgent
 

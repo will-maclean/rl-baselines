@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from structures import CircularQueue, SumTree
+from .structures import CircularQueue, SumTree
 
 
 class ReplayBuffer(ABC):

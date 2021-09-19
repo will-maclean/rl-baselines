@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from layers import NoisyLinear
+from utils.layers import NoisyLinear
 
 
 class MLP(nn.Module):
