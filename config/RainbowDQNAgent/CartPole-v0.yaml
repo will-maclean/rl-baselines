@@ -1,16 +1,19 @@
 env_wrapper: no_wrapper
 trainer: offline
 trainer_params:
-  env_steps: 50000
+  env_steps: 500000
   batch_size: 32
-  burn_in: 500
+  burn_in: 1000
   train_steps_per_env_step: 1
   render: False
-  train_every: 4
+  train_every: 1
 agent: rainbow_dqn
 agent_params:
-  gamma: 0.99
-  lr: 0.0003
-  max_memory: 50000
-  reward_scale: 1
+  gamma: 0.98
+  lr: 0.0002
+  max_memory: 100000
+  reward_scale: 0.1
   polyak_tau: 0.01
+  soft_update_freq: 1
+  num_hidden: 1
+  hidden_size: 32

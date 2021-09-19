@@ -25,6 +25,8 @@ class DQNAgent(OfflineAgent):
                  soft_update_freq=None,
                  reward_scale=1,
                  batch_size=32,
+                 hidden_size=16,
+                 num_hidden=1,
                  ):
         memory = replay_buffer_type(max_memory)
         super().__init__(env, name, memory=memory, batch_size=batch_size, device=device)
@@ -36,12 +38,24 @@ class DQNAgent(OfflineAgent):
         self.soft_update_freq = soft_update_freq
         self.lr = lr
         self.reward_scale = reward_scale
+        self.hidden_size = hidden_size
+        self.num_hidden = num_hidden
 
         self.memory: ReplayBuffer = memory
 
         sample_input = env.reset()
-        self.net = net_class(sample_input.shape[0], env.action_space.n).to(device)
-        self.target_net = net_class(sample_input.shape[0], env.action_space.n).to(device)
+        self.net = net_class(
+            sample_input.shape[0],
+            env.action_space.n,
+            hidden_size=self.hidden_size,
+            num_hidden=self.num_hidden,
+        ).to(device)
+        self.target_net = net_class(
+            sample_input.shape[0],
+            env.action_space.n,
+            hidden_size=self.hidden_size,
+            num_hidden=self.num_hidden,
+        ).to(device)
 
         self.optim = Adam(params=self.net.parameters(), lr=lr)
 
@@ -119,4 +133,6 @@ class DQNAgent(OfflineAgent):
             "soft_update_freq": self.soft_update_freq,
             "reward_scale": self.reward_scale,
             "memory_type": self.memory.__class__,
+            "hidden_size": self.hidden_size,
+            "num_hidden": self.num_hidden,
         }

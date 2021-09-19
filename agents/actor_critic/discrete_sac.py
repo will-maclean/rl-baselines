@@ -11,7 +11,7 @@ class DiscreteSACAgent(SACAgent):
     def __init__(self,
                  env,
                  device,
-                 name="SAC",
+                 name="DiscreteSAC",
                  replay_buffer_type=StandardReplayBuffer,
                  max_memory=10_000,
                  batch_size=32,
