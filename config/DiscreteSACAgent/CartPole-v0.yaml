@@ -1,7 +1,7 @@
 env_wrapper: no_wrapper
 trainer: offline
 trainer_params:
-  env_steps: 50000
+  env_steps: 500000
   batch_size: 32
   burn_in: 500
   train_steps_per_env_step: 1
@@ -13,11 +13,11 @@ agent_params:
   lr_pi: 0.0003
   lr_q: 0.0003
   lr_a: 0.0003
-  max_memory: 50000
-  trainable_alpha: True
+  max_memory: 100000
+  trainable_alpha: False
   reward_scale: 1
-  alpha: 6
+  alpha: 1
   polyak_tau: 0.005
-  pi_hidden_size: 64
-  q_hidden_size: 64
+  pi_hidden_size: 32
+  q_hidden_size: 32
   min_alpha: 0.001

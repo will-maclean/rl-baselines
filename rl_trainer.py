@@ -43,12 +43,10 @@ class OfflineTrainer(RLTrainer):
 
     def train(self):
         # setup Weights and Biases
-        wandb.login(key="c9501a5fdcab6428101221c42b3e8b34f942538f")
-        run = wandb.init(entity="thirstCrusher",
-                         project="rl-baselines",
-                         config={**self.config(), **self.agent.config()},
-                         group=self.agent.name
-                         )
+        wandb.init(project="rl-baselines",
+                   config={**self.config(), **self.agent.config()},
+                   group=self.agent.name
+                   )
 
         state = self.env.reset()
         step = 0
