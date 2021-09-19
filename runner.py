@@ -36,5 +36,5 @@ class RLRunner:
 
 
 if __name__ == "__main__":
-    runner = RLRunner("CartPole-v0", "config/DiscreteSACAgent/CartPole-v0.yaml")
+    runner = RLRunner("CartPole-v0", "config/RainbowDQNAgent/CartPole-v0.yaml")
     runner.start()

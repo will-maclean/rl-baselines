@@ -48,6 +48,8 @@ class OfflineTrainer(RLTrainer):
                    group=self.agent.name
                    )
 
+        self.agent.wandb_watch()
+
         state = self.env.reset()
         step = 0
         env_return = 0

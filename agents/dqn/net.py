@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 from utils.layers import NoisyLinear
@@ -24,26 +25,43 @@ class MLP(nn.Module):
 
 
 class DuellingDQN(nn.Module):
-    def __init__(self, n_in, n_out, activation=nn.ReLU):
+    def __init__(self, n_in, n_out, hidden_size=16, num_hidden=1, activation=nn.ReLU):
 
         super().__init__()
 
-        # self.processing = nn.Sequential(
-        #     nn.Linear(n_in, 64),
-        #     activation()
-        # )
+        if num_hidden > 0:
+            processing = [nn.Linear(n_in, hidden_size), activation()]
 
-        self.value = nn.Sequential(
-            nn.Linear(n_in, 16, bias=True),
-            activation(),
-            nn.Linear(16, 1)
-        )
+            for _ in range(num_hidden):
+                processing.extend([nn.Linear(hidden_size, hidden_size), activation()])
 
-        self.advantage = nn.Sequential(
-            nn.Linear(n_in, 16, bias=True),
-            activation(),
-            nn.Linear(16, n_out)
-        )
+            self.processing = nn.Sequential(*processing)
+
+            self.value = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size, bias=True),
+                activation(),
+                nn.Linear(hidden_size, 1)
+            )
+
+            self.advantage = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size, bias=True),
+                activation(),
+                nn.Linear(hidden_size, n_out)
+            )
+        else:
+            self.processing = None
+
+            self.value = nn.Sequential(
+                nn.Linear(n_in, hidden_size, bias=True),
+                activation(),
+                nn.Linear(hidden_size, 1)
+            )
+
+            self.advantage = nn.Sequential(
+                nn.Linear(n_in, hidden_size, bias=True),
+                activation(),
+                nn.Linear(hidden_size, n_out)
+            )
 
     def forward(self, x: torch.Tensor):
         """
@@ -53,7 +71,8 @@ class DuellingDQN(nn.Module):
         :return: output vector
         """
 
-        # x = self.processing(x)
+        if self.processing is not None:
+            x = self.processing(x)
 
         v = self.value(x)
 
@@ -63,27 +82,43 @@ class DuellingDQN(nn.Module):
 
 
 class NoisyDuellingDQN(nn.Module):
-    # todo - could be larger for Atari modules
-    def __init__(self, n_in, n_out, activation=nn.ReLU, noisy_sigma_0=0.5):
+    def __init__(self, n_in, n_out, hidden_size=16, num_hidden=1, activation=nn.ReLU, noisy_sigma_0=0.5):
 
         super().__init__()
 
-        # self.processing = nn.Sequential(
-        #     NoisyLinear(n_in, 64, sigma_0=noisy_sigma_0),
-        #     activation()
-        # )
+        if num_hidden > 0:
+            processing = [NoisyLinear(n_in, hidden_size, sigma_0=noisy_sigma_0), activation()]
 
-        self.value = nn.Sequential(
-            NoisyLinear(n_in, 16, sigma_0=noisy_sigma_0),
-            activation(),
-            NoisyLinear(16, 1, sigma_0=noisy_sigma_0)
-        )
+            for _ in range(num_hidden):
+                processing.extend([NoisyLinear(hidden_size, hidden_size, sigma_0=noisy_sigma_0), activation()])
 
-        self.advantage = nn.Sequential(
-            NoisyLinear(n_in, 16, sigma_0=noisy_sigma_0),
-            activation(),
-            NoisyLinear(16, n_out, sigma_0=noisy_sigma_0)
-        )
+            self.processing = nn.Sequential(*processing)
+
+            self.value = nn.Sequential(
+                NoisyLinear(hidden_size, hidden_size, sigma_0=noisy_sigma_0),
+                activation(),
+                NoisyLinear(hidden_size, 1)
+            )
+
+            self.advantage = nn.Sequential(
+                NoisyLinear(hidden_size, hidden_size, sigma_0=noisy_sigma_0),
+                activation(),
+                NoisyLinear(hidden_size, n_out, sigma_0=noisy_sigma_0)
+            )
+        else:
+            self.processing = None
+
+            self.value = nn.Sequential(
+                NoisyLinear(n_in, hidden_size, sigma_0=noisy_sigma_0),
+                activation(),
+                NoisyLinear(hidden_size, 1, sigma_0=noisy_sigma_0)
+            )
+
+            self.advantage = nn.Sequential(
+                NoisyLinear(n_in, hidden_size, sigma_0=noisy_sigma_0),
+                activation(),
+                NoisyLinear(hidden_size, sigma_0=noisy_sigma_0)
+            )
 
     def forward(self, x: torch.Tensor):
         """
@@ -92,8 +127,8 @@ class NoisyDuellingDQN(nn.Module):
         :param x: input vector
         :return: output vector
         """
-
-        # x = self.processing(x)
+        if self.processing is not None:
+            x = self.processing(x)
 
         v = self.value(x)
 
@@ -115,3 +150,67 @@ class NoisyDuellingDQN(nn.Module):
         #         module.update_noise()
 
 
+# Adapted from https://github.com/xtma/dsac/blob/master/rlkit/torch/dsac/networks.py
+class IQNNet(nn.Module):
+    def __init__(
+            self,
+            S,
+            hidden_sizes,
+            A,
+            device,
+            embedding_size=64,
+            num_quantiles=32,
+            layer_norm=True,
+            **kwargs,
+    ):
+        super().__init__()
+        self.layer_norm = layer_norm
+
+        self.base_fc = []
+        last_size = S
+        for next_size in hidden_sizes[:-1]:
+            self.base_fc += [
+                nn.Linear(last_size, next_size),
+                nn.LayerNorm(next_size) if layer_norm else nn.Identity(),
+                nn.ReLU(inplace=True),
+            ]
+            last_size = next_size
+        self.base_fc = nn.Sequential(*self.base_fc)
+        self.num_quantiles = num_quantiles
+        self.embedding_size = embedding_size
+        self.tau_fc = nn.Sequential(
+            nn.Linear(embedding_size, last_size),
+            nn.LayerNorm(last_size) if layer_norm else nn.Identity(),
+            nn.Sigmoid(),
+        )
+        self.merge_fc = nn.Sequential(
+            nn.Linear(last_size, hidden_sizes[-1]),
+            nn.LayerNorm(hidden_sizes[-1]) if layer_norm else nn.Identity(),
+            nn.ReLU(inplace=True),
+        )
+        self.last_fc = nn.Linear(hidden_sizes[-1], A)
+        self.const_vec = torch.from_numpy(np.arange(1, 1 + self.embedding_size)).to(device)
+
+        self.to(device)
+
+    def forward(self, state, tau):
+        """
+        Calculate Quantile Value in Batch
+        tau: quantile fractions, (N, T)
+        """
+
+        h = self.base_fc(state)  # (N, C)
+
+        x = torch.cos(tau * self.const_vec * np.pi)  # (N, T, E)
+        x = self.tau_fc(x)  # (N, T, C)
+
+        h = torch.mul(x, h.unsqueeze(-2))  # (N, T, C)
+        h = self.merge_fc(h)  # (N, T, C)
+        output = self.last_fc(h).squeeze(-1)  # (N, T)
+        return output
+
+    def q_vals(self, state, tau_hat, presum_tau):
+        zs = self(state, tau_hat)
+        q = (zs * presum_tau).sum(dim=-1)
+
+        return q

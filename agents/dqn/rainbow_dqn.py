@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import wandb
 
 from .net import NoisyDuellingDQN
 from .dqn import DQNAgent
@@ -29,6 +30,8 @@ class RainbowDQNAgent(DQNAgent):
                  reward_scale=1,
                  batch_size=32,
                  max_memory=10_000,
+                 hidden_size=16,
+                 num_hidden=0,
                  ):
         super(RainbowDQNAgent, self).__init__(env=env,
                                               device=device,
@@ -44,6 +47,8 @@ class RainbowDQNAgent(DQNAgent):
                                               replay_buffer_type=replay_buffer_type,
                                               batch_size=batch_size,
                                               max_memory=max_memory,
+                                              hidden_size=hidden_size,
+                                              num_hidden=num_hidden,
                                               )
 
     def act(self, state, env, step=-1):
@@ -101,3 +106,6 @@ class RainbowDQNAgent(DQNAgent):
 
     def log(self, log_dict):
         return None
+
+    def wandb_watch(self):
+        wandb.watch(self.net)
