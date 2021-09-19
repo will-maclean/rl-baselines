@@ -25,6 +25,11 @@ class SACAgent(OfflineAgent):
                  lr_a=3e-4,
                  polyak_tau=5e-3,
                  reward_scale=1,
+                 pi_class=ContinuousPolicy,
+                 critic_class=ContinuousCritic,
+                 pi_hidden_size=64,
+                 q_hidden_size=64,
+                 min_alpha=None
                  ):
 
         memory = replay_buffer_type(max_memory)
@@ -36,30 +41,37 @@ class SACAgent(OfflineAgent):
             device=device
         )
         self.s = env.reset().shape[0]
-        self.a = env.action_space.shape[0]
+        try:
+            self.a = env.action_space.shape[0]
+        except IndexError:
+            self.a = env.action_space.n
+
         self.gamma = gamma
         self.lr_pi = lr_pi
         self.lr_q = lr_q
         self.lr_a = lr_a
         self.polyak_tau = polyak_tau
         self.reward_scale = reward_scale
+        self.pi_hidden_size = pi_hidden_size
+        self.q_hidden_size = q_hidden_size
+        self.min_alpha = min_alpha
 
         self.trainable_alpha = trainable_alpha
 
         if self.trainable_alpha:
-            self.log_alpha = torch.tensor(-np.log(alpha), requires_grad=True, dtype=torch.float32).to(self.device)
-            self.target_entropy = torch.tensor(-0.98*np.log(self.a), dtype=torch.float32).to(self.device)
+            self.log_alpha = torch.tensor(np.log(alpha), requires_grad=True, dtype=torch.float32).to(self.device)
+            self.target_entropy = torch.tensor(-0.98*np.log(1/self.a), dtype=torch.float32).to(self.device)
             self.alpha = self.log_alpha.exp()
         else:
             self.log_alpha = None
             self.target_entropy = None
             self.alpha = alpha
 
-        self.pi = ContinuousPolicy(self.s, self.a, device).to(self.device)
-        self.q1 = ContinuousCritic(self.s, self.a).to(self.device)
-        self.q2 = ContinuousCritic(self.s, self.a).to(self.device)
-        self.q1_targ = ContinuousCritic(self.s, self.a).to(self.device)
-        self.q2_targ = ContinuousCritic(self.s, self.a).to(self.device)
+        self.pi = pi_class(self.s, self.a, device, hidden_size=pi_hidden_size).to(self.device)
+        self.q1 = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+        self.q2 = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+        self.q1_targ = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+        self.q2_targ = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
 
         self.q1_targ.load_state_dict(self.q1.state_dict())
         self.q2_targ.load_state_dict(self.q2.state_dict())
@@ -83,8 +95,8 @@ class SACAgent(OfflineAgent):
 
         return a, None
 
-    def train_step(self, step):
-        states, actions, next_states, rewards, dones = self.memory.sample(self.batch_size)
+    def get_batch(self, batch_size):
+        states, actions, next_states, rewards, dones = self.memory.sample(batch_size)
 
         states = torch.from_numpy(np.stack([np.float32(state) for state in states])).to(self.device,
                                                                                         dtype=torch.float32)
@@ -93,6 +105,11 @@ class SACAgent(OfflineAgent):
         actions = torch.tensor(np.array(actions), dtype=torch.long, device=self.device).squeeze(-1)
         rewards = torch.tensor(np.array(rewards), dtype=torch.float32, device=self.device)
         dones = torch.tensor(np.array(dones), dtype=torch.float32, device=self.device).unsqueeze(1)
+
+        return states, actions, next_states, rewards, dones
+
+    def train_step(self, step):
+        states, actions, next_states, rewards, dones = self.get_batch(self.batch_size)
 
         q1_loss, q2_loss = self.calculate_critic_losses(states, actions, next_states, rewards, dones)
 
@@ -118,6 +135,7 @@ class SACAgent(OfflineAgent):
             "q1_loss": q1_loss.detach().cpu().item(),
             "q2_loss": q2_loss.detach().cpu().item(),
             "alpha": self.alpha,
+            "log_alpha": self.log_alpha,
         }
 
         if self.trainable_alpha:
@@ -128,6 +146,9 @@ class SACAgent(OfflineAgent):
             self.a_optim.step()
 
             self.alpha = self.log_alpha.exp()
+
+            if self.min_alpha is not None:
+                self.alpha = max(self.alpha, self.min_alpha)
 
             log_dict["alpha_loss"] = alpha_loss.detach().cpu().item()
 
@@ -157,6 +178,7 @@ class SACAgent(OfflineAgent):
             qf2_next_target = self.q2_targ(next_states, next_state_action)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
             next_q_value = self.reward_scale * rewards + (1.0 - dones) * self.gamma * min_qf_next_target
+
         qf1 = self.q1(states, actions)
         qf2 = self.q2(states, actions)
         qf1_loss = F.mse_loss(qf1, next_q_value)
@@ -179,6 +201,12 @@ class SACAgent(OfflineAgent):
             "lr_a": self.lr_a,
             "alpha0": self.alpha,
             "gamma": self.gamma,
-            "polyak_tau": self.polyak_tau
+            "polyak_tau": self.polyak_tau,
+            "pi_class": self.pi.__class__,
+            "q_class": self.q1.__class__,
+            "reward_scale": self.reward_scale,
+            "q_hidden_size": self.q_hidden_size,
+            "pi_hidden_size": self.pi_hidden_size,
+            "min_alpha": self.min_alpha,
         }
 

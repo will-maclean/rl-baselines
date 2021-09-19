@@ -1,10 +1,9 @@
+import torch
+
 from agents.actor_critic.sac import SACAgent
 
 
 class DSAC(SACAgent):
-    def act(self, state, env, step=-1):
-        pass
-
     def train_step(self, step):
         pass
 

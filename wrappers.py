@@ -228,12 +228,9 @@ class WrapPendulum(gym.Wrapper):
         self.env_name = env.spec.id
 
     def step(self, action):
-        if "Pendulum" in self.env_name:
-            action = 2 * action
-        else:
-            raise NotImplementedError
+        action = 2 * action
 
-        s, r, d, i = self.env.step(action)  # Why does pensulum return a state (3, 1)? Couldn't tell you
+        s, r, d, i = self.env.step(action)  # Why does pendulum return a state (3, 1)? Couldn't tell you
         return s.squeeze(), r, d, i
 
 

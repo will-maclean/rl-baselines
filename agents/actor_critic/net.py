@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
-from torch.distributions import Normal
+from torch.distributions import Normal, Categorical
 import torch.nn.functional as F
 
 
@@ -73,6 +73,50 @@ class ContinuousPolicy(nn.Module):
         return a, logp_pi
 
 
+class DiscretePolicy(nn.Module):
+    def __init__(self, S, A, device, hidden_size=64):
+        super().__init__()
+
+        self.device = device
+
+        self.layers = nn.Sequential(
+            nn.Linear(S, hidden_size),
+            nn.Sigmoid(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Sigmoid(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Sigmoid(),
+            nn.Linear(hidden_size, A),
+            nn.Softmax(dim=1),
+        )
+
+        self.S = S
+        self.A = A
+
+    def forward(self, x):
+        return self.layers(x)
+
+    def act(self, s: torch.Tensor):
+        if isinstance(s, np.ndarray):
+            was_numpy = True
+            s = torch.from_numpy(s).unsqueeze(0).to(self.device, dtype=torch.float32)
+        else:
+            was_numpy = False
+
+        x = self(s)
+
+        dist = Categorical(probs=x)
+
+        a = dist.sample()  # todo - unsqueeze?
+
+        logp_pi = dist.log_prob(a)
+
+        if was_numpy:
+            a = a.detach().cpu().item()
+
+        return a, logp_pi
+
+
 class ContinuousCritic(nn.Module):
     def __init__(self, S, A_size=1):
         super().__init__()
@@ -92,3 +136,19 @@ class ContinuousCritic(nn.Module):
     def forward(self, s, a):
         x = torch.cat([s, a], dim=1)
         return self.layers(x)
+
+
+class DiscreteCritic(nn.Module):
+    def __init__(self, S, A, hidden_size=64):
+        super().__init__()
+
+        self.layers = nn.Sequential(
+            nn.Linear(S, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, A),
+        )
+
+    def forward(self, s):
+        return self.layers(s)

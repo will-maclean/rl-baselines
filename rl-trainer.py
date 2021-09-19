@@ -5,7 +5,7 @@ import torch.cuda
 
 import wandb
 
-from agents import DQNAgent, RainbowDQNAgent, RLAgent
+from agents import DQNAgent, RainbowDQNAgent, RLAgent, DiscreteSACAgent
 from agents.actor_critic import SACAgent
 from agents.agent import OfflineAgent
 from replay import ReplayBuffer, StandardReplayBuffer
@@ -180,28 +180,32 @@ class OnlineTrainer(RLTrainer):
 
 
 if __name__ == "__main__":
-    env = WrapPendulum(gym.make("Pendulum-v0"))
+    env = gym.make("CartPole-v0")
     # env = wrap_dqn(env)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     max_steps = 500_000
 
-    agent = SACAgent(env, device,
-                     gamma=0.99,
-                     lr_pi=0.00003,
-                     lr_q=0.00003,
-                     lr_a=0.00003,
-                     max_memory=400_000,
-                     trainable_alpha=False,
-                     reward_scale=0.0015,
-                     alpha=0.2,
-                     polyak_tau=0.005,
-                     )
+    agent = DiscreteSACAgent(env, device,
+                             gamma=0.99,
+                             lr_pi=3e-4,
+                             lr_q=3e-4,
+                             lr_a=3e-4,
+                             max_memory=400_000,
+                             trainable_alpha=True,
+                             reward_scale=1,
+                             alpha=6,
+                             polyak_tau=0.005,
+                             pi_hidden_size=64,
+                             q_hidden_size=32,
+                             min_alpha=0.01,
+                             )
+
     trainer = OfflineTrainer(env,
                              agent,
                              env_steps=max_steps,
                              batch_size=32,
                              burn_in=500,
-                             train_steps_per_env_step=2,
+                             train_steps_per_env_step=4,
                              render=False,
                              )
     trainer.train()
