@@ -183,7 +183,7 @@ if __name__ == "__main__":
     env = WrapPendulum(gym.make("Pendulum-v0"))
     # env = wrap_dqn(env)
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    max_steps = 100_000
+    max_steps = 500_000
 
     agent = SACAgent(env, device,
                      gamma=0.99,
@@ -191,8 +191,10 @@ if __name__ == "__main__":
                      lr_q=0.00003,
                      lr_a=0.00003,
                      max_memory=400_000,
-                     trainable_alpha=True,
-                     reward_scale=0.001
+                     trainable_alpha=False,
+                     reward_scale=0.0015,
+                     alpha=0.2,
+                     polyak_tau=0.005,
                      )
     trainer = OfflineTrainer(env,
                              agent,

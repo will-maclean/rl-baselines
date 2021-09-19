@@ -36,3 +36,8 @@ class OfflineAgent(RLAgent, ABC):
         RLAgent.__init__(self, env, name, device)
         self.memory = memory
         self.batch_size = batch_size
+
+
+class OnlineAgent(RLAgent, ABC):
+    def __init__(self, env, name, device):
+        RLAgent.__init__(self, env, name, device)
