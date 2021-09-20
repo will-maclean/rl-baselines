@@ -4,10 +4,13 @@ import gym
 import torch.cuda
 
 import wandb
+from tqdm import tqdm
 
 from agents import DQNAgent, RainbowDQNAgent, RLAgent, DiscreteSACAgent
 from agents.actor_critic import SACAgent
-from agents.agent import OfflineAgent
+from agents.agent import OfflineAgent, OnlineAgent
+from utils.env import ParallelEnv
+from utils.replay import StandardReplayBuffer
 from utils.wrappers import wrap_dqn, WrapPendulum
 
 
@@ -110,74 +113,56 @@ class OnlineTrainer(RLTrainer):
                  env,
                  agent,
                  env_steps: int = 50_000,
-                 batch_size: int = 32,
-                 render: bool = False,
+                 n_envs: int = 4,
+                 steps_per_env=32,
+                 eval_every: int = 2,
                  ):
         self.env = env
-        self.agent: RLAgent = agent
+        self.agent: OnlineAgent = agent
         self.env_steps = env_steps
-        self.batch_size = batch_size
-        self.render = render
+        self.n_envs = n_envs
+        self.steps_per_env = steps_per_env
+        self.eval_every = eval_every
 
     def train(self):
         # setup Weights and Biases
-        wandb.login(key="c9501a5fdcab6428101221c42b3e8b34f942538f")
-        run = wandb.init(entity="thirstCrusher",
-                         project="rl-baselines",
-                         config={**self.config(), **self.agent.config()},
-                         group=self.agent.name
-                         )
+        wandb.init(project="rl-baselines",
+                   config={**self.config(), **self.agent.config()},
+                   group=self.agent.name
+                   )
 
-        state = self.env.reset()
-        step = 0
-        env_return = 0
-        episodes = 0
-        ep_length = 0
+        self.agent.wandb_watch()
 
-        ep_data = []
+        train_count = 0
+        for step in tqdm(range(0, self.env_steps, self.n_envs * self.steps_per_env)):
+            sample = self.agent.sample()
+            log_dict = self.agent.train_step(sample)
 
-        while step < self.env_steps:
-            action, act_info = self.agent.act(state, env, step)
-            next_state, reward, done, info = self.env.step(action)
-
-            if self.render:
-                env.render()
-
-            env_return += reward
-            step += 1
-            ep_length += 1
-
-            ep_data.append((state, action, next_state, reward, done))
-
-            log_dict = self.agent.log(act_info)
             if log_dict is not None:
                 wandb.log(log_dict)
 
-            state = next_state
+            train_count += 1
 
-            if len(ep_data) >= self.batch_size:
-                log_dict = self.agent.train_step(ep_data, step)
-                wandb.log(log_dict)
-                ep_data = []
-
-            if done:
-                state = self.env.reset()
-
-                wandb.log({
-                    "episode": episodes,
-                    "return": env_return,
-                    "episode_length": ep_length,
-                })
-
-                episodes += 1
-                env_return = 0
-                ep_length = 0
+            if train_count > self.eval_every:
+                result = self.evaluate()
+                wandb.log(result)
+                train_count = 0
 
     def config(self):
+        return {}
+
+    def evaluate(self):
+        ep_return = 0
+        state = self.env.reset()
+        done = False
+        while not done:
+            a, _ = self.agent.act(state, self.env)
+            state, reward, done, _ = self.env.step(a[0].detach().cpu().numpy())
+
+            ep_return += reward
+
         return {
-            "env_name": self.env.spec.id,
-            "env_steps": self.env_steps,
-            "batch_size": self.batch_size,
+            "eval_score": ep_return,
         }
 
 

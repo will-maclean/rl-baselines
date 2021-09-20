@@ -1,0 +1,20 @@
+env_wrapper: WrapPendulum
+trainer: online
+trainer_params:
+  env_steps: 3000000
+  n_envs: 8
+  steps_per_env: 32
+  eval_every: 2
+agent: ppo_agent
+agent_params:
+  hidden_size: 32
+  num_hidden: 2
+  steps_per_env: 32
+  n_envs: 8
+  n_mini_batch: 4
+  lr: 0.0003
+  epochs: 8
+  gamma: 0.99
+  gae_lambda: 0.95
+  critic_coefficient: 0.4
+  entroy_coefficient: 0.001

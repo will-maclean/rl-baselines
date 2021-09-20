@@ -10,10 +10,11 @@ trainer_params:
 agent: rainbow_dqn
 agent_params:
   gamma: 0.98
-  lr: 0.0002
+  lr: 0.00008
   max_memory: 100000
   reward_scale: 0.1
   polyak_tau: 0.01
-  soft_update_freq: 1
-  num_hidden: 1
-  hidden_size: 32
+  soft_update_freq: null
+  hard_update_freq: 5000
+  num_hidden: 0
+  hidden_size: 16

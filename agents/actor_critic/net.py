@@ -6,28 +6,30 @@ import torch.nn.functional as F
 
 
 class ContinuousPolicy(nn.Module):
-    def __init__(self, S, A, device):
+    def __init__(self, S, A, device, hidden_size=64, num_hidden=2, activation=nn.ReLU):
         super().__init__()
 
         self.device = device
 
-        self.layers = nn.Sequential(
-            nn.Linear(S, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-        )
+        layers = [
+            nn.Linear(S, hidden_size),
+            activation(),
+        ]
+
+        for _ in range(num_hidden):
+            layers.extend([
+                nn.Linear(hidden_size, hidden_size),
+                activation(),
+            ])
+
+        self.layers = nn.Sequential(*layers)
 
         self.mu = nn.Sequential(
-            nn.Linear(64, A),
+            nn.Linear(hidden_size, A),
         )
 
         self.sigma = nn.Sequential(
-            nn.Linear(64, A),
+            nn.Linear(hidden_size, A),
         )
 
         self.S = S
@@ -36,7 +38,7 @@ class ContinuousPolicy(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-    def act(self, s: torch.Tensor):
+    def act(self, s: torch.Tensor, log_pi=True):
         if isinstance(s, np.ndarray):
             was_numpy = True
             s = torch.from_numpy(s).unsqueeze(0).to(self.device, dtype=torch.float32)
@@ -55,15 +57,18 @@ class ContinuousPolicy(nn.Module):
         log_sd = self.sigma(x)
 
         log_sd = torch.clamp(log_sd, -20, 2)
-        sd = torch.exp(log_sd)  # todo - experiment with .abs() instead of .exp()
+        sd = torch.exp(log_sd)
 
         dist = Normal(loc=mu, scale=sd)
 
         a = dist.rsample()
 
-        logp_pi = dist.log_prob(a).sum(axis=-1)
-        logp_pi -= (2 * (np.log(2) - a - F.softplus(-2 * a))).sum(axis=1)
-        logp_pi = logp_pi.unsqueeze(-1)
+        if log_pi:
+            logp_pi = dist.log_prob(a).sum(axis=-1)
+            logp_pi -= (2 * (np.log(2) - a - F.softplus(-2 * a))).sum(axis=1)
+            logp_pi = logp_pi.unsqueeze(-1)
+        else:
+            logp_pi = dist.log_prob(a).exp()
 
         a = torch.tanh(a)
 
@@ -71,6 +76,15 @@ class ContinuousPolicy(nn.Module):
             a = a.detach().cpu().numpy()
 
         return a, logp_pi
+
+    def dist(self, x):
+        mu = self.mu(x)
+        log_sd = self.sigma(x)
+
+        log_sd = torch.clamp(log_sd, -20, 2)
+        sd = torch.exp(log_sd)
+
+        return Normal(loc=mu, scale=sd)
 
 
 class DiscretePolicy(nn.Module):
@@ -81,6 +95,8 @@ class DiscretePolicy(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Linear(S, hidden_size),
+            nn.Sigmoid(),
+            nn.Linear(hidden_size, hidden_size),
             nn.Sigmoid(),
             nn.Linear(hidden_size, hidden_size),
             nn.Sigmoid(),
@@ -138,6 +154,26 @@ class ContinuousCritic(nn.Module):
         return self.layers(x)
 
 
+class ContinuousV(nn.Module):
+    def __init__(self, S):
+        super().__init__()
+
+        self.layers = nn.Sequential(
+            nn.Linear(S, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, s):
+        return self.layers(s)
+
+
 class DiscreteCritic(nn.Module):
     def __init__(self, S, A, hidden_size=64):
         super().__init__()
@@ -154,3 +190,54 @@ class DiscreteCritic(nn.Module):
 
     def forward(self, s):
         return self.layers(s)
+
+
+class ContinuousMLPAC(nn.Module):
+    def __init__(self, S, A, device,
+                 hidden_size=64,
+                 num_hidden=2,
+                 activation=nn.ReLU):
+        super().__init__()
+
+        self.device = device
+
+        layers = [
+            nn.Linear(S, hidden_size),
+            activation(),
+        ]
+
+        for _ in range(num_hidden):
+            layers.extend([
+                nn.Linear(hidden_size, hidden_size),
+                activation(),
+            ])
+
+        self.layers = nn.Sequential(*layers)
+
+        self.pi = ContinuousPolicy(hidden_size, A, device, hidden_size, 0)
+
+        self.v = ContinuousV(hidden_size)
+
+    def forward(self, x):
+        x = self.layers(x)
+
+        dist = self.pi.dist(x)
+
+        return dist, self.v(x)
+
+    def act(self, s: torch.Tensor, v=False):
+        if isinstance(s, np.ndarray):
+            was_numpy = True
+            s = torch.from_numpy(s).unsqueeze(0).to(self.device, dtype=torch.float32)
+        else:
+            was_numpy = False
+
+        if s.isnan().any():
+            print("problem")
+
+        x = self.layers(s.detach())
+
+        if v:
+            return self.pi.act(x, log_pi=False), (self.v,)
+        else:
+            return self.pi.act(x, log_pi=False)

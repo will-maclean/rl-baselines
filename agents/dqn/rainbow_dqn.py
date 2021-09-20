@@ -4,7 +4,7 @@ import wandb
 
 from .net import NoisyDuellingDQN
 from .dqn import DQNAgent
-from utils.replay import StandardReplayBuffer
+from utils.replay import StandardReplayBuffer, PrioritisedReplayBuffer
 
 
 class RainbowDQNAgent(DQNAgent):
@@ -12,7 +12,7 @@ class RainbowDQNAgent(DQNAgent):
     # 1. Duelling (X)
     # 2. Double (X)
     # 3. Noisy (X)
-    # 4. Prioritised ( )
+    # 4. Prioritised (X)
     # 5. N-Step ( )
     # 6. Distributed ( )
 

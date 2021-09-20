@@ -38,12 +38,21 @@ class StandardReplayBuffer(ReplayBuffer):
 
         return zip(*random.sample(self.memory, batch_size))
 
+    def all(self):
+        return zip(*self.memory)
+
     def append(self, *experience):
         """
         Append experience to the memory
         :param experience: Tuple of experience
         """
         self.memory.append(experience)
+
+    def is_full(self):
+        return len(self.memory) == self.max_memory
+
+    def clear(self):
+        self.memory.clear()
 
 
 class PrioritisedReplayBuffer(ReplayBuffer):

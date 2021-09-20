@@ -117,7 +117,7 @@ class NoisyDuellingDQN(nn.Module):
             self.advantage = nn.Sequential(
                 NoisyLinear(n_in, hidden_size, sigma_0=noisy_sigma_0),
                 activation(),
-                NoisyLinear(hidden_size, sigma_0=noisy_sigma_0)
+                NoisyLinear(hidden_size, n_out, sigma_0=noisy_sigma_0)
             )
 
     def forward(self, x: torch.Tensor):

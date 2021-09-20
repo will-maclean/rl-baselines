@@ -14,10 +14,6 @@ class RLAgent(ABC):
         pass
 
     @abstractmethod
-    def train_step(self, step):
-        pass
-
-    @abstractmethod
     def save(self, path):
         pass
 
@@ -56,7 +52,37 @@ class OfflineAgent(RLAgent, ABC):
 
         return states, actions, next_states, rewards, dones
 
+    @abstractmethod
+    def train_step(self, step):
+        pass
+
 
 class OnlineAgent(RLAgent, ABC):
-    def __init__(self, env, name, device):
+    def __init__(self, env, name, device, memory):
         RLAgent.__init__(self, env, name, device)
+        self.memory = memory
+
+    @abstractmethod
+    def train_step(self, step):
+        pass
+
+    def get_batch(self):
+        states, actions, next_states, rewards, dones = self.memory.all()
+
+        states = torch.from_numpy(np.stack([np.float32(state) for state in states])).to(self.device,
+                                                                                        dtype=torch.float32)
+        next_states = torch.from_numpy(np.stack([np.float32(state) for state in next_states])).to(self.device,
+                                                                                                  dtype=torch.float32)
+        actions = torch.tensor(actions, dtype=torch.long, device=self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32, device=self.device)
+        dones = torch.tensor(dones, dtype=torch.float32, device=self.device)
+
+        return states, actions, next_states, rewards, dones
+
+    @abstractmethod
+    def sample(self):
+        pass
+
+    @abstractmethod
+    def ready_to_train(self):
+        pass

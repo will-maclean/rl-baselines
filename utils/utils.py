@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 import numpy as np
 
@@ -32,3 +33,27 @@ def copy_weights(copy_from: nn.Module, copy_to: nn.Module, polyak=None):
     else:
         copy_to.load_state_dict(copy_from.state_dict())
 
+
+def gae(done, rewards, values, n_envs, steps_per_env, gamma, gae_lambda, device):
+    """
+    Call method for the GAE to calculate/return advantages
+
+    Parameters
+    ----------
+    done: Tensor[num_workers, num_steps]
+    rewards: Tensor [num_workers, num_steps]
+    values: Tensor [num_workers, num_steps + 1]
+
+    Returns
+    -------
+    advantages: Tensor [num_workers, num_steps]
+    """
+    advantages = torch.zeros((n_envs, steps_per_env, 1), dtype=torch.float, device=device)
+    last_advantage = 0
+    for state in reversed(range(steps_per_env)):
+        error = rewards[:, state] + gamma * values[:, state + 1] * (~done[:, state]) - values[:, state]
+        last_advantage = (error + gamma * gae_lambda * last_advantage * (~done[:, state]))
+
+        advantages[:, state] = last_advantage
+
+    return advantages

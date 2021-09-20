@@ -1,0 +1,18 @@
+env_wrapper: no_wrapper
+trainer: offline
+trainer_params:
+  env_steps: 50000
+  burn_in: 500
+  train_steps_per_env_step: 1
+  render: False
+  train_every: 4
+agent: iqn_agent
+agent_params:
+  gamma: 0.99
+  lr: 0.0003
+  max_memory: 50000
+  reward_scale: 1
+  polyak_tau: 0.01
+  batch_size: 32
+  num_quantiles: 8
+  huber_kappa: 1.0
