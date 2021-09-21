@@ -22,6 +22,8 @@ class RLRunner:
         if not config["env_wrapper"] == "no_wrapper":
             wrapper_func = globals()[config["env_wrapper"]]
             env = wrapper_func(env)
+        else:
+            wrapper_func=None
 
         # create trainer
         if config["trainer"] == "offline":

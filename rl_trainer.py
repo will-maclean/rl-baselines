@@ -144,6 +144,10 @@ class OnlineTrainer(RLTrainer):
             train_count += 1
 
             if train_count > self.eval_every:
+                # online agents generally don't complete episodes in such a way that we can track them, as they often
+                # use parallel environments. Instead of arbitrarily choosing an environment to track, we'll just run an
+                # evaluation episode to see how our agent performs.
+
                 result = self.evaluate()
                 wandb.log(result)
                 train_count = 0
