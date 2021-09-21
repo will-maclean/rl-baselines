@@ -2,15 +2,15 @@ env_wrapper: WrapPendulum
 trainer: online
 trainer_params:
   env_steps: 5000000
-  n_envs: 8
-  steps_per_env: 32
+  n_envs: 16
+  steps_per_env: 256
   eval_every: 2
 agent: ppo_agent
 agent_params:
   hidden_size: 64
   num_hidden: 1
-  steps_per_env: 256
-  n_envs: 16
+  steps_per_env: 256    # ensure same as trainer_params
+  n_envs: 16            # ensure same as trainer_params
   n_mini_batch: 32
   lr: 0.0005
   epochs: 10

@@ -59,6 +59,7 @@ class OfflineTrainer(RLTrainer):
         episodes = 0
         ep_length = 0
 
+        pbar = tqdm(total=self.env_steps)
         while step < self.env_steps:
             action, act_info = self.agent.act(state, self.env, step)
             next_state, reward, done, info = self.env.step(action)
@@ -68,6 +69,7 @@ class OfflineTrainer(RLTrainer):
 
             env_return += reward
             step += 1
+            pbar.update(1)
             ep_length += 1
 
             self.agent.memory.append(state, action, next_state, reward, done)

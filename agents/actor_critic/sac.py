@@ -115,19 +115,19 @@ class SACAgent(OfflineAgent):
 
         self.q1_optim.zero_grad()
         q1_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q1.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.q1.parameters(), 5)
         self.q1_optim.step()
 
         self.q2_optim.zero_grad()
         q2_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q2.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.q2.parameters(), 5)
         self.q2_optim.step()
 
         pi_loss, ln_pi = self.calculate_actor_loss(states)
 
         self.pi_optim.zero_grad()
         pi_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.pi.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(self.pi.parameters(), 5)
         self.pi_optim.step()
 
         log_dict = {

@@ -2,22 +2,22 @@ env_wrapper: no_wrapper
 trainer: offline
 trainer_params:
   env_steps: 500000
-  batch_size: 128
-  burn_in: 500
+  batch_size: 256
+  burn_in: 400
   train_steps_per_env_step: 1
   render: False
   train_every: 1
 agent: discrete_sac
 agent_params:
   gamma: 0.99
-  lr_pi: 0.00003
-  lr_q: 0.00003
-  lr_a: 0.00002
+  lr_pi: 0.0003
+  lr_q: 0.0003
+  lr_a: 0.0002
   max_memory: 100000
   trainable_alpha: True
   reward_scale: 1
   alpha: 10
-  polyak_tau: 0.005
-  pi_hidden_size: 32
-  q_hidden_size: 32
+  polyak_tau: 0.001
+  pi_hidden_size: 64
+  q_hidden_size: 64
   min_alpha: 0.001

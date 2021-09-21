@@ -43,5 +43,5 @@ class RLRunner:
 
 
 if __name__ == "__main__":
-    runner = RLRunner("Pendulum-v0", "config/PPOAgent/Pendulum-v0.yaml")
+    runner = RLRunner("Seaquest-ramNoFrameskip-v0", "config/DiscreteSACAgent/atari.yaml")
     runner.start()
