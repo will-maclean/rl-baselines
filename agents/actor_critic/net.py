@@ -94,7 +94,7 @@ class DiscretePolicy(nn.Module):
         self.device = device
 
         self.layers = nn.Sequential(
-            nn.Linear(S, hidden_size),
+            nn.Linear(S[0], hidden_size),
             nn.Sigmoid(),
             nn.Linear(hidden_size, hidden_size),
             nn.Sigmoid(),
@@ -110,6 +110,59 @@ class DiscretePolicy(nn.Module):
         self.A = A
 
     def forward(self, x):
+        return self.layers(x)
+
+    def act(self, s: torch.Tensor):
+        if isinstance(s, np.ndarray):
+            was_numpy = True
+            s = torch.from_numpy(s).unsqueeze(0).to(self.device, dtype=torch.float32)
+        else:
+            was_numpy = False
+
+        x = self(s)
+
+        dist = Categorical(probs=x)
+
+        a = dist.sample()  # todo - unsqueeze?
+
+        logp_pi = dist.log_prob(a)
+
+        if was_numpy:
+            a = a.detach().cpu().item()
+
+        return a, logp_pi
+
+
+class DiscreteCNNPolicy(nn.Module):
+    def __init__(self, S, A, device, hidden_size=64):
+        super().__init__()
+
+        self.device = device
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(in_channels=S[0], out_channels=32, kernel_size=8, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+        )
+
+        sample_input = torch.zeros((1, *S))
+        cnn_output_shape = self.cnn(sample_input).flatten(1).shape[1]
+
+        self.layers = nn.Sequential(
+            nn.Linear(cnn_output_shape, 512),
+            nn.ReLU(),
+            nn.Linear(512, A),
+            nn.Softmax(dim=1)
+        )
+
+        self.S = S
+        self.A = A
+
+    def forward(self, x):
+        x = self.cnn(x).flatten(1)
         return self.layers(x)
 
     def act(self, s: torch.Tensor):
@@ -179,7 +232,9 @@ class DiscreteCritic(nn.Module):
         super().__init__()
 
         self.layers = nn.Sequential(
-            nn.Linear(S, hidden_size),
+            nn.Linear(S[0], hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -189,6 +244,33 @@ class DiscreteCritic(nn.Module):
         )
 
     def forward(self, s):
+        return self.layers(s)
+
+
+class DiscreteCNNCritic(nn.Module):
+    def __init__(self, S, A, hidden_size=64):
+        super().__init__()
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(in_channels=S[0], out_channels=32, kernel_size=8, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+        )
+
+        sample_input = torch.zeros((1, *S))
+        cnn_output_shape = self.cnn(sample_input).flatten(1).shape[1]
+
+        self.layers = nn.Sequential(
+            nn.Linear(cnn_output_shape, 512),
+            nn.ReLU(),
+            nn.Linear(512, A),
+        )
+
+    def forward(self, s):
+        s = self.cnn(s).flatten(1)
         return self.layers(s)
 
 

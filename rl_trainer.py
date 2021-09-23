@@ -1,9 +1,12 @@
+import glob
+import os
 from abc import ABC, abstractmethod
 
 import gym
 import torch.cuda
 
 import wandb
+from gym.wrappers import Monitor
 from tqdm import tqdm
 
 from agents import DQNAgent, RainbowDQNAgent, RLAgent, DiscreteSACAgent
@@ -23,6 +26,11 @@ class RLTrainer(ABC):
     def config(self):
         pass
 
+    def wandb_upload_media(self):
+        os.chdir(wandb.run.dir)
+        for file in glob.glob("*.mp4"):
+            wandb.log({"evaluation_media": wandb.Video(file)})
+
 
 class OfflineTrainer(RLTrainer):
     def __init__(self,
@@ -34,6 +42,7 @@ class OfflineTrainer(RLTrainer):
                  batch_size: int = 32,
                  render: bool = False,
                  train_every: int = 1,
+                 wrap_monitor=False,
                  ):
         self.env = env
         self.agent: OfflineAgent = agent
@@ -43,6 +52,7 @@ class OfflineTrainer(RLTrainer):
         self.batch_size = batch_size
         self.render = render
         self.train_every = train_every
+        self.wrap_monitor = wrap_monitor
 
     def train(self):
         # setup Weights and Biases
@@ -50,6 +60,9 @@ class OfflineTrainer(RLTrainer):
                    config={**self.config(), **self.agent.config()},
                    group=self.agent.name
                    )
+
+        if self.wrap_monitor:
+            self.env = Monitor(self.env, wandb.run.dir)
 
         self.agent.wandb_watch()
 
@@ -99,6 +112,8 @@ class OfflineTrainer(RLTrainer):
                 env_return = 0
                 ep_length = 0
 
+        self._finished_training()
+
     def config(self):
         return {
             "env_name": self.env.spec.id,
@@ -108,6 +123,9 @@ class OfflineTrainer(RLTrainer):
             "batch_size": self.batch_size,
             "train_every": self.train_every,
         }
+
+    def _finished_training(self):
+        self.wandb_upload_media()
 
 
 class OnlineTrainer(RLTrainer):

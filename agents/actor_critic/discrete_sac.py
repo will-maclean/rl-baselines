@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from utils.replay import StandardReplayBuffer
-from .net import DiscretePolicy, DiscreteCritic
+from .net import DiscretePolicy, DiscreteCritic, DiscreteCNNPolicy, DiscreteCNNCritic
 from .sac import SACAgent
 
 
@@ -23,11 +23,14 @@ class DiscreteSACAgent(SACAgent):
                  lr_a=3e-4,
                  polyak_tau=5e-3,
                  reward_scale=1,
-                 pi_class=DiscretePolicy,
-                 critic_class=DiscreteCritic,
+                 pi_class="DiscreteCNNPolicy",
+                 critic_class="DiscreteCNNCritic",
                  pi_hidden_size=64,
                  q_hidden_size=64,
-                 min_alpha=None
+                 min_alpha=None,
+                 target_actor=False,
+                 actor_weight_initialisation="default",
+                 critic_weight_initialisation="default",
                  ):
         super().__init__(
             env=env,
@@ -49,21 +52,26 @@ class DiscreteSACAgent(SACAgent):
             pi_hidden_size=pi_hidden_size,
             q_hidden_size=q_hidden_size,
             min_alpha=min_alpha,
+            target_actor=target_actor,
+            actor_weight_initialisation=actor_weight_initialisation,
+            critic_weight_initialisation=critic_weight_initialisation,
         )
 
     def calculate_actor_loss(self, state):
         policy = self.pi(state)
         with torch.no_grad():
-            qf1_pi = self.q1(state)
-            qf2_pi = self.q2(state)
+            qf1_pi = self.q1_targ(state)
+            qf2_pi = self.q2_targ(state)
             min_qf = torch.min(qf1_pi, qf2_pi)
 
         ln_policy = torch.clamp(policy.log(), -20, 0)
 
         policy_loss = (policy * (self.alpha * ln_policy - min_qf)).sum(dim=1).mean()
-        return policy_loss, ln_policy
+        return policy_loss, (policy, ln_policy)
 
     def calculate_alpha_loss(self, ln_policy):
+        policy, ln_policy = ln_policy
+        # alpha_loss = -(policy.detach() * self.log_alpha * (ln_policy + self.target_entropy).detach()).sum(dim=1).mean()
         alpha_loss = -(self.log_alpha * (ln_policy + self.target_entropy).detach()).mean()
         return alpha_loss
 
@@ -71,7 +79,10 @@ class DiscreteSACAgent(SACAgent):
         with torch.no_grad():
             qf1_next_target = self.q1_targ(next_states)
             qf2_next_target = self.q2_targ(next_states)
-            next_state_policy = self.pi(next_states)
+            if self.target_actor:
+                next_state_policy = self.pi_targ(next_states)
+            else:
+                next_state_policy = self.pi(next_states)
 
             next_ln_pi = torch.clamp(next_state_policy.log(), -20, 0)
 

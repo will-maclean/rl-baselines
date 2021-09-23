@@ -1,18 +1,18 @@
 env_wrapper: wrap_dqn
 trainer: offline
 trainer_params:
-  env_steps: 500000
-  batch_size: 256
-  burn_in: 30000
+  env_steps: 800000
+  batch_size: 64
+  burn_in: 20000
   train_steps_per_env_step: 1
   render: False
-  train_every: 1
+  train_every: 4
 agent: discrete_sac
 agent_params:
   gamma: 0.99
-  lr_pi: 0.0003
-  lr_q: 0.0003
-  lr_a: 0.0002
+  lr_pi: 0.0002
+  lr_q: 0.0002
+  lr_a: 0.00016
   max_memory: 200000
   trainable_alpha: True
   reward_scale: 1
@@ -20,4 +20,6 @@ agent_params:
   polyak_tau: 0.0005
   pi_hidden_size: 128
   q_hidden_size: 128
-  min_alpha: 0.005
+  min_alpha: 0.01
+  pi_class: DiscretePolicy
+  critic_class: DiscreteCritic

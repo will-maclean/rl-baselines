@@ -3,10 +3,11 @@ import torch
 from torch.optim import Adam
 import torch.nn.functional as F
 
-from .net import ContinuousPolicy, ContinuousCritic
+from .net import DiscreteCNNCritic, DiscreteCNNPolicy, DiscreteCritic, DiscretePolicy, \
+    ContinuousPolicy, ContinuousCritic, ContinuousMLPAC, ContinuousV
 from agents.agent import OfflineAgent
 from utils.replay import StandardReplayBuffer
-from utils import copy_weights
+from utils import copy_weights, nn_weight_init
 
 
 class SACAgent(OfflineAgent):
@@ -25,14 +26,20 @@ class SACAgent(OfflineAgent):
                  lr_a=3e-4,
                  polyak_tau=5e-3,
                  reward_scale=1,
-                 pi_class=ContinuousPolicy,
-                 critic_class=ContinuousCritic,
+                 pi_class="ContinuousPolicy",
+                 critic_class="ContinuousCritic",
                  pi_hidden_size=64,
                  q_hidden_size=64,
-                 min_alpha=None
+                 min_alpha=None,
+                 target_actor=False,
+                 actor_weight_initialisation="default",
+                 critic_weight_initialisation="default",
                  ):
 
         memory = replay_buffer_type(max_memory)
+        pi_class = globals()[pi_class]
+        critic_class = globals()[critic_class]
+
         super(SACAgent, self).__init__(
             env=env,
             name=name,
@@ -40,7 +47,7 @@ class SACAgent(OfflineAgent):
             batch_size=batch_size,
             device=device
         )
-        self.s = env.reset().shape[0]
+        self.s = env.reset().shape
         try:
             self.a = env.action_space.shape[0]
         except IndexError:
@@ -55,6 +62,9 @@ class SACAgent(OfflineAgent):
         self.pi_hidden_size = pi_hidden_size
         self.q_hidden_size = q_hidden_size
         self.min_alpha = min_alpha
+        self.target_actor = target_actor
+        self.actor_weight_initialisation = actor_weight_initialisation
+        self.critic_weight_initialisation = critic_weight_initialisation
 
         self.trainable_alpha = trainable_alpha
 
@@ -68,10 +78,20 @@ class SACAgent(OfflineAgent):
             self.alpha = alpha
 
         self.pi = pi_class(self.s, self.a, device, hidden_size=pi_hidden_size).to(self.device)
+        nn_weight_init(self.pi, method=self.actor_weight_initialisation)
         self.q1 = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+        nn_weight_init(self.q1, method=self.critic_weight_initialisation)
         self.q2 = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+        nn_weight_init(self.q2, method=self.critic_weight_initialisation)
+
         self.q1_targ = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
         self.q2_targ = critic_class(self.s, self.a, hidden_size=q_hidden_size).to(self.device)
+
+        if self.target_actor:
+            self.pi_targ = pi_class(self.s, self.a, device, hidden_size=pi_hidden_size).to(self.device)
+            self.pi_targ.load_state_dict(self.pi.state_dict())
+        else:
+            self.pi_targ = None
 
         self.q1_targ.load_state_dict(self.q1.state_dict())
         self.q2_targ.load_state_dict(self.q2.state_dict())
@@ -115,19 +135,19 @@ class SACAgent(OfflineAgent):
 
         self.q1_optim.zero_grad()
         q1_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q1.parameters(), 5)
+        torch.nn.utils.clip_grad_norm_(self.q1.parameters(), 1)
         self.q1_optim.step()
 
         self.q2_optim.zero_grad()
         q2_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q2.parameters(), 5)
+        torch.nn.utils.clip_grad_norm_(self.q2.parameters(), 1)
         self.q2_optim.step()
 
         pi_loss, ln_pi = self.calculate_actor_loss(states)
 
         self.pi_optim.zero_grad()
         pi_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.pi.parameters(), 5)
+        torch.nn.utils.clip_grad_norm_(self.pi.parameters(), 1)
         self.pi_optim.step()
 
         log_dict = {
@@ -143,6 +163,7 @@ class SACAgent(OfflineAgent):
 
             self.a_optim.zero_grad()
             alpha_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.pi.parameters(), 1)
             self.a_optim.step()
 
             self.alpha = self.log_alpha.exp()
@@ -154,6 +175,9 @@ class SACAgent(OfflineAgent):
 
         copy_weights(copy_from=self.q1, copy_to=self.q1_targ, polyak=self.polyak_tau)
         copy_weights(copy_from=self.q2, copy_to=self.q2_targ, polyak=self.polyak_tau)
+
+        if self.target_actor:
+            copy_weights(copy_from=self.pi, copy_to=self.pi_targ, polyak=self.polyak_tau)
 
         return log_dict
 
@@ -208,5 +232,7 @@ class SACAgent(OfflineAgent):
             "q_hidden_size": self.q_hidden_size,
             "pi_hidden_size": self.pi_hidden_size,
             "min_alpha": self.min_alpha,
+            "actor_weight_initialisation": self.actor_weight_initialisation,
+            "critic_weight_initialisation": self.critic_weight_initialisation,
         }
 

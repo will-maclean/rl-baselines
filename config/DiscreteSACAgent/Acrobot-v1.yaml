@@ -3,27 +3,25 @@ trainer: offline
 trainer_params:
   env_steps: 100000
   batch_size: 256
-  burn_in: 400
+  burn_in: 10000
   train_steps_per_env_step: 1
   render: False
   train_every: 1
-  wrap_monitor: False
+  wrap_monitor: True
 agent: discrete_sac
 agent_params:
-  gamma: 0.95
-  lr_pi: 0.0003
-  lr_q: 0.0003
-  lr_a: 0.0002
+  gamma: 0.99
+  lr_pi: 0.0002
+  lr_q: 0.0002
+  lr_a: 0.00018
   max_memory: 100000
   trainable_alpha: True
-  reward_scale: 1.0
-  alpha: 10.0
+  reward_scale: 0.1
+  alpha: 10
   polyak_tau: 0.001
-  pi_hidden_size: 64
-  q_hidden_size: 64
-  min_alpha: 0.001
+  pi_hidden_size: 128
+  q_hidden_size: 128
+  min_alpha: 0.005
   pi_class: DiscretePolicy
   critic_class: DiscreteCritic
   target_actor: False
-  actor_weight_initialisation: default
-  critic_weight_initialisation: default

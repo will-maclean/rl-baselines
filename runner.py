@@ -1,8 +1,11 @@
+import argparse
+
 import yaml
 
 import gym
 
 from agents.agent import OfflineAgent, OnlineAgent
+from utils import config_argparse
 from utils.wrappers import *
 from agents import AgentType, str_to_agent_type
 from rl_trainer import OfflineTrainer, OnlineTrainer
@@ -17,6 +20,8 @@ class RLRunner:
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         env = gym.make(env_name)
+
+        config = config_argparse(config)
 
         # wrap env if required
         if not config["env_wrapper"] == "no_wrapper":
@@ -43,5 +48,5 @@ class RLRunner:
 
 
 if __name__ == "__main__":
-    runner = RLRunner("Seaquest-ramNoFrameskip-v0", "config/DiscreteSACAgent/atari.yaml")
+    runner = RLRunner("CartPole-v0", "config/DiscreteSACAgent/CartPole-v0.yaml")
     runner.start()

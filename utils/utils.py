@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+import argparse
 
 
 def linear_decay(step, start_val, final_val, final_steps):
@@ -57,3 +58,58 @@ def gae(done, rewards, values, n_envs, steps_per_env, gamma, gae_lambda, device)
         advantages[:, state] = last_advantage
 
     return advantages
+
+
+def nn_weight_init(net: nn.Module, method="default"):
+    if method == "default":
+        return
+
+    elif method == "He":
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                torch.nn.init.kaiming_uniform_(m.weight)
+
+        net.apply(init_weights)
+
+    elif method == "xavier_normal":
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                torch.nn.init.xavier_normal_(m.weight)
+
+        net.apply(init_weights)
+
+    elif method == "xavier_uniform":
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+
+        net.apply(init_weights)
+
+    else:
+        raise NotImplementedError
+
+
+def config_argparse(cfg):
+    parser = argparse.ArgumentParser()
+    for name in cfg["trainer_params"]:
+        parser.add_argument("--" + name, default=cfg["trainer_params"][name], type=type(cfg["trainer_params"][name]))
+
+    for name in cfg["agent_params"]:
+        parser.add_argument("--" + name, default=cfg["agent_params"][name], type=type(cfg["agent_params"][name]))
+
+    args = parser.parse_args()
+
+    for name in args.__dict__:
+        try:
+            a = cfg["agent_params"][name]
+            cfg["agent_params"][name] = args.__dict__[name]
+        except KeyError:
+            pass
+
+        try:
+            a = cfg["trainer_params"][name]
+            cfg["trainer_params"][name] = args.__dict__[name]
+        except KeyError:
+            pass
+
+    return cfg
