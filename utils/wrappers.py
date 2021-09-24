@@ -274,6 +274,15 @@ class LazyToNumpy(gym.ObservationWrapper):
         return np.array(observation)
 
 
+class AlphaZeroChessWrapper(gym.ObservationWrapper):
+    """
+    Change image shape to CWH
+    """
+
+    def observation(self, observation):
+        return np.swapaxes(observation, 2, 0)
+
+
 # class FreewayYReward(gym.Wrapper):
 #
 #     def step(self, action):

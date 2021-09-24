@@ -19,6 +19,10 @@ class ReplayBuffer(ABC):
     def append(self, *experience):
         pass
 
+    @abstractmethod
+    def __len__(self):
+        pass
+
 
 class StandardReplayBuffer(ReplayBuffer):
     def __init__(self, max_mem_states):
@@ -53,6 +57,9 @@ class StandardReplayBuffer(ReplayBuffer):
 
     def clear(self):
         self.memory.clear()
+
+    def __len__(self):
+        return len(self.memory)
 
 
 class PrioritisedReplayBuffer(ReplayBuffer):

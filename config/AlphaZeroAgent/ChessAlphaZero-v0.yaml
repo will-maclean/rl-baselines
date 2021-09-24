@@ -1,0 +1,16 @@
+env_wrapper: AlphaZeroChessWrapper
+trainer: alphazero_trainer
+trainer_params:
+  env_steps: 50000
+  burn_in: 5
+  train_steps_per_env_step: 1
+  render: False
+  train_every: 1
+agent: alphazero
+agent_params:
+  lr: 0.003
+  max_memory: 25000
+  rollouts: 10
+  pi_temp: 1.0
+  batch_size: 4
+  res_layers: 1

@@ -1,20 +1,13 @@
 import glob
 import os
 from abc import ABC, abstractmethod
-
-import gym
-import torch.cuda
+from copy import deepcopy
 
 import wandb
 from gym.wrappers import Monitor
 from tqdm import tqdm
 
-from agents import DQNAgent, RainbowDQNAgent, RLAgent, DiscreteSACAgent
-from agents.actor_critic import SACAgent
 from agents.agent import OfflineAgent, OnlineAgent
-from utils.env import ParallelEnv
-from utils.replay import StandardReplayBuffer
-from utils.wrappers import wrap_dqn, WrapPendulum
 
 
 class RLTrainer(ABC):
@@ -78,7 +71,7 @@ class OfflineTrainer(RLTrainer):
             next_state, reward, done, info = self.env.step(action)
 
             if self.render:
-                env.render()
+                self.env.render()
 
             env_return += reward
             step += 1
@@ -190,34 +183,66 @@ class OnlineTrainer(RLTrainer):
         }
 
 
-if __name__ == "__main__":
-    env = gym.make("MsPacman-ramNoFrameskip-v0")
-    env = wrap_dqn(env)
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    max_steps = 1_000_000
+class AlphaZeroTrainer(OfflineTrainer):
+    def train(self):
+        # setup Weights and Biases
+        wandb.init(project="rl-baselines",
+                   config={**self.config(), **self.agent.config()},
+                   group=self.agent.name
+                   )
 
-    agent = DiscreteSACAgent(env, device,
-                             gamma=0.99,
-                             lr_pi=3e-4,
-                             lr_q=3e-4,
-                             lr_a=3e-4,
-                             max_memory=500_000,
-                             trainable_alpha=True,
-                             reward_scale=0.1,
-                             alpha=6,
-                             polyak_tau=0.005,
-                             pi_hidden_size=64,
-                             q_hidden_size=64,
-                             min_alpha=0.001,
-                             )
+        # if self.wrap_monitor:
+        #     self.env = Monitor(self.env, wandb.run.dir)
 
-    trainer = OfflineTrainer(env,
-                             agent,
-                             env_steps=max_steps,
-                             batch_size=32,
-                             burn_in=20_000,
-                             train_steps_per_env_step=1,
-                             render=False,
-                             train_every=4,
-                             )
-    trainer.train()
+        self.agent.wandb_watch()
+
+        state = self.env.reset()
+        step = 0
+        env_return = 0
+        episodes = 0
+        ep_length = 0
+
+        ep_data = []
+
+        pbar = tqdm(total=self.env_steps)
+        while step < self.env_steps:
+            action, pi = self.agent.act(state, deepcopy(self.env), step)
+            next_state, reward, done, info = self.env.step(action)
+
+            if self.render:
+                self.env.render()
+
+            env_return += reward
+            step += 1
+            pbar.update(1)
+            ep_length += 1
+
+            ep_data.append((state, pi))
+
+            state = next_state
+
+            if len(self.agent.memory) > self.burn_in and step % self.train_every == 0:
+                for _ in range(self.train_steps_per_env_step):
+                    log_dict = self.agent.train_step(step)
+                    if log_dict is not None:
+                        wandb.log(log_dict)
+
+            if done:
+                state = self.env.reset()
+
+                for item in reversed(ep_data):
+                    exp = (item[0], reward, item[1])
+                    self.agent.memory.append(*exp)
+
+                    reward *= -1
+
+                wandb.log({
+                    "train/episode": episodes,
+                    "train/episode_length": ep_length,
+                })
+
+                episodes += 1
+                env_return = 0
+                ep_length = 0
+
+        self._finished_training()
