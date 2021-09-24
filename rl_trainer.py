@@ -197,6 +197,7 @@ class AlphaZeroTrainer(OfflineTrainer):
         self.agent.wandb_watch()
 
         state = self.env.reset()
+        self.agent.reset(env=self.env, reset_state=state)
         step = 0
         env_return = 0
         episodes = 0
@@ -228,13 +229,18 @@ class AlphaZeroTrainer(OfflineTrainer):
                         wandb.log(log_dict)
 
             if done:
-                state = self.env.reset()
 
                 for item in reversed(ep_data):
                     exp = (item[0], reward, item[1])
                     self.agent.memory.append(*exp)
 
                     reward *= -1
+
+                eval_log = self.agent.evaluate(self.env)
+                wandb.log(eval_log)
+
+                state = self.env.reset()
+                self.agent.reset(env=self.env, reset_state=state)
 
                 wandb.log({
                     "train/episode": episodes,

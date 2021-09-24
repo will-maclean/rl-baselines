@@ -33,6 +33,12 @@ class RLAgent(ABC):
     def wandb_watch(self):
         pass
 
+    def evaluate(self, env):
+        pass
+
+    def opponent_action(self, a):
+        pass
+
 
 class OfflineAgent(RLAgent, ABC):
     def __init__(self, env, name, memory, batch_size, device):
@@ -55,6 +61,9 @@ class OfflineAgent(RLAgent, ABC):
 
     @abstractmethod
     def train_step(self, step):
+        pass
+
+    def reset(self, env=None, reset_state=None):
         pass
 
 

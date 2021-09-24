@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from numpy.random import default_rng
 from torch import nn
 from copy import deepcopy
 
@@ -117,14 +118,42 @@ class Node:
                 )
                 self.children.append(new_node)
 
+    def child_by_action(self, a):
+        if len(self.children) == 0:
+            child_states_actions = get_child_states_actions(self.env)
+
+            for child_env, state, action, child_done, child_return in child_states_actions:
+                new_node = Node(
+                    env=child_env,
+                    state=state,
+                    eps=self.eps,
+                    eta=self.eta,
+                    parent=self,
+                    prev_action=action,
+                    done=child_done,
+                    result=child_return,
+                )
+                self.children.append(new_node)
+
+        # returns the child corresponding to the given action
+        for child in self.children:
+            if child.prev_action == a:
+                return child
+
+        raise IndexError("Child for node with action {} not found", a)
 
 class MCTS:
     # todo - currently we make a new mcts search tree every move. This is extremely inefficient. Investigate setting
     #  it up so that we reuse relevant parts of the tree every move - should let the tree grow much larger
+
+    # todo - detect and link transpositions. For example, 1. e4 d4 2. e5 d5 leads to the same board position as 1. e5
+    #  d5 2. e4 d4, so we should be able to link those two nodes together so we aren't processing the same position
+    #  multiple times.
     def __init__(self,
                  game,
                  state,
                  rollouts,
+                 A,
                  device,
                  net: nn.Module,
                  pi_temp=1,
@@ -134,6 +163,7 @@ class MCTS:
                  ):
         self.game = game
         self.rollouts = rollouts
+        self.A = A
         self.root: Node = Node(
                     env=game,
                     state=state,
@@ -146,6 +176,7 @@ class MCTS:
         self.net = net
         self.pi_temp = pi_temp
         self.device = device
+        self.rng = default_rng()
 
     def act(self):
         for i in range(self.rollouts):
@@ -153,7 +184,16 @@ class MCTS:
             next_node, v = self.expand(leaf)
             self.back_up(next_node, v)
 
-        return self.root.policy(self.game.action_space.n, temperature=self.pi_temp)
+        pi = self.root.policy(self.game.action_space.n, temperature=self.pi_temp)
+
+        a = self.rng.choice(np.arange(self.A), p=pi)
+        a = int(a)
+
+        # we now want to set the root of the tree to be the node corresponding to the chosen action
+        self.root = self.root.child_by_action(a)
+        self.root.parent = None
+
+        return a, pi
 
     def select(self, current_node: Node):
         if len(current_node.children) == 0:
@@ -185,4 +225,9 @@ class MCTS:
         current_node.update_u()
 
         self.back_up(current_node.parent, v)
+
+    def opponent_action(self, a):
+        # we now want to set the root of the tree to be the node corresponding to the chosen action
+        self.root = self.root.child_by_action(a)
+        self.root.parent = None
 
