@@ -212,7 +212,7 @@ class MCTS:
 
             leaf.expand_children(net_pi)
 
-            return leaf.parent, net_v
+            return leaf.parent, -net_v
 
     def back_up(self, current_node: Node, v):
         if current_node is None:
@@ -224,7 +224,7 @@ class MCTS:
 
         current_node.update_u()
 
-        self.back_up(current_node.parent, v)
+        self.back_up(current_node.parent, -v)
 
     def opponent_action(self, a):
         # we now want to set the root of the tree to be the node corresponding to the chosen action

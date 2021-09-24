@@ -10,7 +10,8 @@ agent: alphazero
 agent_params:
   lr: 0.0003
   max_memory: 25000
-  rollouts: 3
+  rollouts: 100
   pi_temp: 1.0
-  batch_size: 4
-  res_layers: 1
+  batch_size: 16
+  res_layers: 4
+  load_path: data/lichess_db_standard_rated_2013-06.pgn

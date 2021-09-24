@@ -7,6 +7,7 @@ from numpy.random import default_rng
 from agents.agent import OfflineAgent
 from .utils.mcts import MCTS
 from .utils.adversary import RandomAdversary
+from .utils.chess_utils import load_games
 from utils.replay import StandardReplayBuffer
 from .net import AlphaZeroNet
 
@@ -18,7 +19,8 @@ class AlphaZeroAgent(OfflineAgent):
                  rollouts=500,
                  lr=1e-4,
                  pi_temp: float = 1.0,
-                 res_layers: int = 19
+                 res_layers: int = 19,
+                 load_path=None,
                  ):
         memory = StandardReplayBuffer(max_memory)
         super().__init__(
@@ -28,6 +30,10 @@ class AlphaZeroAgent(OfflineAgent):
             batch_size=batch_size,
             device=device,
         )
+
+        if load_path is not None:
+            load_games(env, load_path, self.memory)
+
         self.rollouts = rollouts
         self.pi_temp = pi_temp
         self.max_memory = max_memory
@@ -57,9 +63,14 @@ class AlphaZeroAgent(OfflineAgent):
 
         pi, v = self.net(states)
 
+        ln_pi_safe = torch.clamp(pi.log(), -20, 0)
+
         q_loss = (rewards - v).pow(2).mean()
-        pi_loss = (mcts_pis * pi.log()).mean()
-        loss = q_loss + pi_loss
+        pi_loss = (mcts_pis * ln_pi_safe).mean()
+        loss = q_loss - pi_loss
+
+        if loss.isnan():
+            raise ValueError("NaN loss! Hisssss")
 
         self.optim.zero_grad()
         loss.backward()
